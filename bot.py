@@ -12,7 +12,7 @@ from aiogram.types import (
 )
 
 # توکن ربات خودت را اینجا بگذار
-TOKEN = "TOKEN_BOT_KHOD_RA_INJA_VARD_KONید"
+TOKEN = "8517015536:AAGoPOUXHAJkwVhCD813cTpJWSnqcWd8jBQ"
 
 router = Router()
 
