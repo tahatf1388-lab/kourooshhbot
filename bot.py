@@ -3,7 +3,7 @@ import logging
 import sys
 
 from aiogram import Bot, Dispatcher, F, Router
-from aiogram.filters import CommandStart, Command
+from aiogram.filters import CommandStart
 from aiogram.types import (
     Message,
     ReplyKeyboardMarkup,
@@ -12,11 +12,10 @@ from aiogram.types import (
 
 # توکن ربات خودت
 TOKEN = "8517015536:AAGoPOUXHAJkwVhCD813cTpJWSnqcWd8jBQ"
-BOT_USERNAME = "kourooshh_bot"  # آیدی یوزرنیم رباتت بدون @
 
 router = Router()
 
-# موقتاً برای ذخیره آخرین فایل دریافتی کاربر (در حافظه)
+# ذخیره اطلاعات آخرین فایل کاربر (فایل آیدی و نوع فایل)
 user_last_file = {}
 
 # منوی اصلی
@@ -46,12 +45,26 @@ file_received_keyboard = ReplyKeyboardMarkup(
 
 @router.message(CommandStart())
 async def command_start_handler(message: Message) -> None:
-    # بررسی اینکه آیا کاربر با لینک مخصوص فایل وارد شده یا خیر (Deep Linking)
     args = message.text.split(maxsplit=1)
     if len(args) > 1 and args[1].startswith("file_"):
-        file_id = args[1].replace("file_", "")
-        await message.answer("🎁 این هم فایل درخواستی شما:")
-        await message.answer_document(document=file_id)
+        file_key = args[1].replace("file_", "")
+        # پیدا کردن فایل بر اساس کلید ذخیره شده
+        if file_key in shared_files_db:
+            file_data = shared_files_db[file_key]
+            await message.answer("🎁 این هم فایل درخواستی شما:")
+            
+            # ارسال فایل بر اساس نوع آن
+            if file_data["type"] == "document":
+                await message.answer_document(file_data["file_id"])
+            elif file_data["type"] == "video":
+                await message.answer_video(file_data["file_id"])
+            elif file_data["type"] == "audio":
+                await message.answer_audio(file_data["file_id"])
+            elif file_data["type"] == "photo":
+                await message.answer_photo(file_data["file_id"])
+        else:
+            await message.answer("⚠️ متأسفانه فایل مورد نظر پیدا نشد یا منقضی شده است.")
+
         await message.answer(
             "به منوی اصلی برگشتید:",
             reply_markup=main_menu_keyboard
@@ -77,12 +90,24 @@ async def back_to_home(message: Message) -> None:
         reply_markup=main_menu_keyboard
     )
 
+# دیتابیس موقت برای نگهداری فایل‌ها با یک کلید کوتاه
+shared_files_db = {}
+
 @router.message(F.text == "📥 دریافت لینک دانلود")
 async def get_download_link(message: Message) -> None:
     user_id = message.from_user.id
     if user_id in user_last_file:
-        file_id = user_last_file[user_id]
-        share_link = f"https://t.me/{BOT_USERNAME}?start=file_{file_id}"
+        file_info = user_last_file[user_id]
+        file_id = file_info["file_id"]
+        
+        # ساخت یک کلید یکتا برای فایل
+        file_key = str(user_id) + "_" + str(len(shared_files_db) + 1)
+        shared_files_db[file_key] = file_info
+
+        # گرفتن یوزرنیم ربات به صورت خودکار
+        bot_info = await message.bot.get_me()
+        share_link = f"https://t.me/{bot_info.username}?start=file_{file_key}"
+
         await message.answer(
             f"🔗 لینک اختصاصی دانلود فایل شما:\n{share_link}\n\nهرکس روی این لینک کلیک کند، ربات مستقیماً فایل را به او تحویل می‌دهد!",
             reply_markup=main_menu_keyboard
@@ -95,20 +120,28 @@ async def get_download_link(message: Message) -> None:
 
 @router.message(F.document | F.video | F.audio | F.photo)
 async def handle_files(message: Message) -> None:
-    # ذخیره مشخصات فایل بر اساس آیدی کاربر
     user_id = message.from_user.id
+    
     if message.document:
         file_id = message.document.file_id
+        file_type = "document"
     elif message.video:
         file_id = message.video.file_id
+        file_type = "video"
     elif message.audio:
         file_id = message.audio.file_id
+        file_type = "audio"
     elif message.photo:
         file_id = message.photo[-1].file_id
+        file_type = "photo"
     else:
         return
 
-    user_last_file[user_id] = file_id
+    user_last_file[user_id] = {
+        "file_id": file_id,
+        "type": file_type
+    }
+    
     await message.answer(
         "✅ فایل با موفقیت دریافت شد.",
         reply_markup=file_received_keyboard
