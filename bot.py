@@ -11,7 +11,7 @@ from aiogram.types import (
 )
 
 # توکن ربات خودت
-TOKEN = "8517015536:AAGoPOUXHAJkWVhCD813cTpJWSnqcWd8jBQ"
+TOKEN = "8517015536:AAGoPOUXHAJkwVhCD813cTpJWSnqcWd8jBQ"
 BOT_USERNAME = "kourooshh_bot"  # آیدی یوزرنیم رباتت بدون @
 
 router = Router()
