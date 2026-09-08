@@ -3,20 +3,23 @@ import logging
 import sys
 
 from aiogram import Bot, Dispatcher, F, Router
-from aiogram.filters import CommandStart
+from aiogram.filters import CommandStart, Command
 from aiogram.types import (
     Message,
     ReplyKeyboardMarkup,
-    KeyboardButton,
-    ReplyKeyboardRemove
+    KeyboardButton
 )
 
-# توکن ربات خودت را اینجا بگذار
-TOKEN = "8517015536:AAGoPOUXHAJkwVhCD813cTpJWSnqcWd8jBQ"
+# توکن ربات خودت
+TOKEN = "8517015536:AAGoPOUXHAJkWVhCD813cTpJWSnqcWd8jBQ"
+BOT_USERNAME = "kourooshh_bot"  # آیدی یوزرنیم رباتت بدون @
 
 router = Router()
 
-# منوی اصلی (دو کلید پایین صفحه)
+# موقتاً برای ذخیره آخرین فایل دریافتی کاربر (در حافظه)
+user_last_file = {}
+
+# منوی اصلی
 main_menu_keyboard = ReplyKeyboardMarkup(
     keyboard=[
         [KeyboardButton(text="📁 آپلود فایل و دریافت لینک"), KeyboardButton(text="👤 حساب کاربری")]
@@ -24,7 +27,7 @@ main_menu_keyboard = ReplyKeyboardMarkup(
     resize_keyboard=True
 )
 
-# منوی زمان آپلود (فقط دکمه بازگشت)
+# منوی بازگشت
 back_keyboard = ReplyKeyboardMarkup(
     keyboard=[
         [KeyboardButton(text="🔙 بازگشت")]
@@ -43,6 +46,18 @@ file_received_keyboard = ReplyKeyboardMarkup(
 
 @router.message(CommandStart())
 async def command_start_handler(message: Message) -> None:
+    # بررسی اینکه آیا کاربر با لینک مخصوص فایل وارد شده یا خیر (Deep Linking)
+    args = message.text.split(maxsplit=1)
+    if len(args) > 1 and args[1].startswith("file_"):
+        file_id = args[1].replace("file_", "")
+        await message.answer("🎁 این هم فایل درخواستی شما:")
+        await message.answer_document(document=file_id)
+        await message.answer(
+            "به منوی اصلی برگشتید:",
+            reply_markup=main_menu_keyboard
+        )
+        return
+
     await message.answer(
         f"سلام {message.from_user.first_name}! به ربات خوش آمدید.\nلطفاً یکی از گزینه‌های زیر را انتخاب کنید:",
         reply_markup=main_menu_keyboard
@@ -55,7 +70,7 @@ async def upload_menu(message: Message) -> None:
         reply_markup=back_keyboard
     )
 
-@router.message(F.text == "🔙 بازگشت" or F.text == "🔙 بازگشت به صفحه اصلی")
+@router.message(F.text.in_(["🔙 بازگشت", "🔙 بازگشت به صفحه اصلی"]))
 async def back_to_home(message: Message) -> None:
     await message.answer(
         "به منوی اصلی برگشتید:",
@@ -64,14 +79,36 @@ async def back_to_home(message: Message) -> None:
 
 @router.message(F.text == "📥 دریافت لینک دانلود")
 async def get_download_link(message: Message) -> None:
-    # اینجا می‌توانی بعداً لینک واقعی تولید شده را بدهی
-    await message.answer(
-        "🔗 لینک دانلود فایل شما:\nhttps://t.me/example_download_link",
-        reply_markup=main_menu_keyboard
-    )
+    user_id = message.from_user.id
+    if user_id in user_last_file:
+        file_id = user_last_file[user_id]
+        share_link = f"https://t.me/{BOT_USERNAME}?start=file_{file_id}"
+        await message.answer(
+            f"🔗 لینک اختصاصی دانلود فایل شما:\n{share_link}\n\nهرکس روی این لینک کلیک کند، ربات مستقیماً فایل را به او تحویل می‌دهد!",
+            reply_markup=main_menu_keyboard
+        )
+    else:
+        await message.answer(
+            "⚠️ ابتدا یک فایل ارسال کنید تا بتوانیم لینک آن را بسازیم.",
+            reply_markup=main_menu_keyboard
+        )
 
 @router.message(F.document | F.video | F.audio | F.photo)
 async def handle_files(message: Message) -> None:
+    # ذخیره مشخصات فایل بر اساس آیدی کاربر
+    user_id = message.from_user.id
+    if message.document:
+        file_id = message.document.file_id
+    elif message.video:
+        file_id = message.video.file_id
+    elif message.audio:
+        file_id = message.audio.file_id
+    elif message.photo:
+        file_id = message.photo[-1].file_id
+    else:
+        return
+
+    user_last_file[user_id] = file_id
     await message.answer(
         "✅ فایل با موفقیت دریافت شد.",
         reply_markup=file_received_keyboard
