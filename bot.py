@@ -19,25 +19,39 @@ TOKEN = "8844658209:AAH41cGWIdMiSLQq8PO5VNU_qds7vWJpmmE"
 
 router = Router()
 
-# وضعیت‌های ربات برای ثبت نام فایل
+# وضعیت‌های ربات برای ثبت نام فایل و لینک
 class UploadStates(StatesGroup):
     waiting_for_file_name = State()
+    waiting_for_new_link = State()
 
-# دیتابیس موقت برای ذخیره‌سازی فایل‌های کاربران
+# دیتابیس‌ها
 user_files_db = {}
 user_temp_file = {}
 shared_files_db = {}
 
+# دیتابیس موقت برای لینک‌های کاربران (user_id -> لیست لینک‌ها یا دیکشنری)
+user_links_db = {}
+user_temp_link = {}
+
 # --- کیبوردها ---
 
-# منوی اصلی (ویرایش شده طبق درخواست شما: بخش لینک و مدیریت فایل بالا، حساب کاربری پایین)
+# منوی اصلی
 main_menu_keyboard = ReplyKeyboardMarkup(
     keyboard=[
         [KeyboardButton(text="🔗 خدمات لینک"), KeyboardButton(text="🗂️ مدیریت فایل‌ها")],
         [KeyboardButton(text="👤 حساب کاربری")]
     ],
     resize_keyboard=True,
-    input_field_placeholder="لطفاً یکی از گزینه‌های زیر را انتخاب کنید..."
+    input_field_placeholder="لطفاً یکی از گزینه‌های زیر را انتخاب کنید... 👇"
+)
+
+# منوی بخش خدمات لینک (طبق درخواست: لینک‌های من سمت چپ، افزودن لینک جدید سمت راست)
+link_services_keyboard = ReplyKeyboardMarkup(
+    keyboard=[
+        [KeyboardButton(text="➕ افزودن لینک جدید"), KeyboardButton(text="📋 لینک‌های من")],
+        [KeyboardButton(text="🔙 بازگشت به منوی اصلی")]
+    ],
+    resize_keyboard=True
 )
 
 # منوی مدیریت فایل‌ها (زیرشاخه منوی اصلی)
@@ -49,7 +63,7 @@ file_management_keyboard = ReplyKeyboardMarkup(
     resize_keyboard=True
 )
 
-# منوی زمان آپلود (فقط دکمه بازگشت)
+# منوی زمان آپلود یا افزودن لینک (فقط دکمه بازگشت)
 back_keyboard = ReplyKeyboardMarkup(
     keyboard=[
         [KeyboardButton(text="🔙 بازگشت")]
@@ -76,9 +90,9 @@ async def command_start_handler(message: Message, state: FSMContext) -> None:
         if file_key in shared_files_db:
             file_data = shared_files_db[file_key]
             if file_data.get("deleted", False):
-                await message.answer("⚠️ متأسفانه فایل مورد نظر توسط کاربر حذف شده است.")
+                await message.answer("⚠️ متأسفانه فایل مورد نظر توسط کاربر حذف شده است. ❌")
             else:
-                await message.answer("🎁 این هم فایل درخواستی شما:")
+                await message.answer("🎁 این هم فایل درخواستی شما: 👇")
                 if file_data["type"] == "document":
                     await message.answer_document(file_data["file_id"])
                 elif file_data["type"] == "video":
@@ -88,16 +102,16 @@ async def command_start_handler(message: Message, state: FSMContext) -> None:
                 elif file_data["type"] == "photo":
                     await message.answer_photo(file_data["file_id"])
         else:
-            await message.answer("⚠️ متأسفانه فایل مورد نظر پیدا نشد یا منقضی شده است.")
+            await message.answer("⚠️ متأسفانه فایل مورد نظر پیدا نشد یا منقضی شده است. ❌")
 
         await message.answer(
-            "🏠 به منوی اصلی برگشتید:",
+            "🏠 به منوی اصلی برگشتید: 👇",
             reply_markup=main_menu_keyboard
         )
         return
 
     await message.answer(
-        f"سلام {message.from_user.first_name}! 👋 به ربات خوش آمدید.\nلطفاً یکی از گزینه‌های زیر را انتخاب کنید: 👇",
+        f"سلام {message.from_user.first_name}! 👋 به ربات مگابات خوش آمدید. 🤖\nلطفاً یکی از گزینه‌های زیر را انتخاب کنید: 👇",
         reply_markup=main_menu_keyboard
     )
 
@@ -106,7 +120,7 @@ async def command_start_handler(message: Message, state: FSMContext) -> None:
 async def management_menu(message: Message, state: FSMContext) -> None:
     await state.clear()
     await message.answer(
-        "🛠️ به بخش مدیریت فایل‌ها خوش آمدید.\nلطفاً یکی از گزینه‌های زیر را انتخاب کنید: 👇",
+        "🛠️ به بخش مدیریت فایل‌ها خوش آمدید. 📂\nلطفاً یکی از گزینه‌های زیر را انتخاب کنید: 👇",
         reply_markup=file_management_keyboard
     )
 
@@ -115,42 +129,30 @@ async def management_menu(message: Message, state: FSMContext) -> None:
 async def upload_menu(message: Message, state: FSMContext) -> None:
     await state.clear()
     await message.answer(
-        "📂 لطفاً فایل خود را با هر فرمت دلخواهی که دارین ارسال کنید! 📎✨",
+        "📂 لطفاً فایل خود را با هر فرمت دلخواهی که دارید ارسال کنید! 📎✨",
         reply_markup=back_keyboard
     )
 
 
-@router.message(F.text == "🔙 بازگشت")
-async def back_action(message: Message, state: FSMContext) -> None:
-    await state.clear()
-    await message.answer(
-        "🔙 به بخش مدیریت فایل‌ها برگشتید:",
-        reply_markup=file_management_keyboard
-    )
-
-
-@router.message(F.text == "🔙 بازگشت به منوی اصلی")
-async def back_to_main(message: Message, state: FSMContext) -> None:
-    await state.clear()
-    await message.answer(
-        "🏠 به منوی اصلی برگشتید:",
-        reply_markup=main_menu_keyboard
-    )
-
-
-# --- بخش جدید: خدمات لینک و کوتاه‌کننده ---
+# --- بخش خدمات لینک (به همراه دو کلید درخواستی) ---
 
 @router.message(F.text == "🔗 خدمات لینک")
 async def link_services_menu(message: Message, state: FSMContext) -> None:
     await state.clear()
     await message.answer(
-        "🔗 **بخش خدمات لینک و کوتاه‌کننده فعال شد.**\n\nلینک طولانی خود را بفرستید تا آن را به یک لینک کوتاه و قابل استفاده در پیامک تبدیل کنم:",
-        reply_markup=ReplyKeyboardMarkup(
-            keyboard=[[KeyboardButton(text="🔙 بازگشت به منوی اصلی")]],
-            resize_keyboard=True
-        ),
-        parse_mode="Markdown"
+        "🔗 به بخش خدمات لینک و کوتاه‌کننده خوش آمدید. 🌐\nلطفاً یکی از گزینه‌های زیر را انتخاب کنید: 👇",
+        reply_markup=link_services_keyboard
     )
+
+
+@router.message(F.text == "➕ افزودن لینک جدید")
+async def add_new_link_prompt(message: Message, state: FSMContext) -> None:
+    await state.set_state(UploadStates.waiting_for_new_link)
+    await message.answer(
+        "🔗 لطفاً لینک طولانی خود را ارسال کنید تا آن را کوتاه کنم و در لیست شما ذخیره کنم: 📝✨",
+        reply_markup=back_keyboard
+    )
+
 
 async def shorten_url(long_url: str) -> str:
     api_url = f"https://is.gd/create.php?format=simple&url={long_url}"
@@ -162,27 +164,97 @@ async def shorten_url(long_url: str) -> str:
             else:
                 return None
 
-@router.message(
-    F.text.startswith("http://") | F.text.startswith("https://") | F.text.startswith("www.")
-)
-async def handle_url_input(message: Message, state: FSMContext) -> None:
-    # اگر کاربر در حال ارسال فایل برای نام‌گذاری باشد، تداخل ایجاد نشود
-    current_state = await state.get_state()
-    if current_state == UploadStates.waiting_for_file_name.state:
+
+@router.message(UploadStates.waiting_for_new_link, F.text)
+async def process_new_link(message: Message, state: FSMContext) -> None:
+    user_link = message.text.strip()
+    
+    if user_link == "🔙 بازگشت":
+        await state.clear()
+        await message.answer(
+            "🔙 به بخش خدمات لینک برگشتید: 👇",
+            reply_markup=link_services_keyboard
+        )
         return
 
-    user_link = message.text.strip()
-    waiting_msg = await message.answer("⏳ در حال کوتاه کردن لینک...")
+    if not (user_link.startswith("http://") or user_link.startswith("https://") or user_link.startswith("www.")):
+        await message.answer("⚠️ لطفاً یک لینک معتبر (شروع شده با http یا https) ارسال کنید: ❌")
+        return
 
+    waiting_msg = await message.answer("⏳ در حال کوتاه کردن لینک... 🔄")
     short_result = await shorten_url(user_link)
 
     if short_result and short_result.startswith("http"):
+        user_id = message.from_user.id
+        if user_id not in user_links_db:
+            user_links_db[user_id] = []
+        
+        # ذخیره لینک کوتاه شده در دیتابیس کاربر
+        link_item = {"long": user_link, "short": short_result}
+        user_links_db[user_id].append(link_item)
+
+        await state.clear()
         await waiting_msg.edit_text(
-            f"🔗 **لینک کوتاه شده‌ی شما آماده است:**\n\n`{short_result}`\n\n✨ می‌توانید این لینک را کپی کرده و در پیامک یا هر جای دیگری استفاده کنید.",
+            f"🎉 لینک شما با موفقیت کوتاه و ذخیره شد! ✅\n\n🔗 لینک کوتاه شده:\n`{short_result}`\n\n✨ می‌توانید از این لینک در پیامک یا هر جای دیگری استفاده کنید.",
             parse_mode="Markdown"
         )
+        await message.answer(
+            "🔙 بازگشت به بخش خدمات لینک: 👇",
+            reply_markup=link_services_keyboard
+        )
     else:
-        await waiting_msg.edit_text("❌ خطا در کوتاه‌کردن لینک. لطفاً لینک معتبری بفرستید.")
+        await waiting_msg.edit_text("❌ خطا در کوتاه‌کردن لینک. لطفاً دوباره تلاش کنید.")
+
+
+@router.message(F.text == "📋 لینک‌های من")
+async def list_user_links(message: Message, state: FSMContext) -> None:
+    await state.clear()
+    user_id = message.from_user.id
+
+    if user_id not in user_links_db or not user_links_db[user_id]:
+        await message.answer(
+            "📭 شما هنوز هیچ لینکی در ربات ذخیره نکرده‌اید. ⚠️",
+            reply_markup=link_services_keyboard
+        )
+        return
+
+    links_text = "📋 لیست لینک‌های کوتاه شده‌ی شما: 👇\n\n"
+    for idx, item in enumerate(user_links_db[user_id], 1):
+        links_text += f"{idx}. اصلی: {item['long']}\n   کوتاه: `{item['short']}`\n\n"
+
+    await message.answer(
+        links_text,
+        parse_mode="Markdown",
+        reply_markup=link_services_keyboard
+    )
+
+
+@router.message(F.text == "👤 حساب کاربری")
+async def user_account_handler(message: Message, state: FSMContext) -> None:
+    await state.clear()
+    await message.answer(
+        "👤 **اطلاعات حساب کاربری شما:** 📊\n\n✨ وضعیت اشتراک: عادی 🌟\n🎁 موجودی ترافیک: رایگان 🚀",
+        parse_mode="Markdown",
+        reply_markup=main_menu_keyboard
+    )
+
+
+@router.message(F.text == "🔙 بازگشت")
+async def back_action(message: Message, state: FSMContext) -> None:
+    await state.clear()
+    await message.answer(
+        "🔙 به بخش مدیریت فایل‌ها برگشتید: 👇",
+        reply_markup=file_management_keyboard
+    )
+
+
+@router.message(F.text == "🔙 بازگشت به منوی اصلی")
+async def back_to_main(message: Message, state: FSMContext) -> None:
+    await state.clear()
+    await message.answer(
+        "🏠 به منوی اصلی برگشتید: 👇",
+        reply_markup=main_menu_keyboard
+    )
 
 
 # دریافت فایل از کاربر
@@ -212,7 +284,7 @@ async def handle_files(message: Message, state: FSMContext) -> None:
 
     await state.set_state(UploadStates.waiting_for_file_name)
     await message.answer(
-        "✅ فایل با موفقیت دریافت شد.\n\n✍️ لطفاً یک نام (فقط به صورت متن) برای این فایل انتخاب و ارسال کنید:",
+        "✅ فایل با موفقیت دریافت شد. 📁\n\n✍️ لطفاً یک نام (فقط به صورت متن) برای این فایل انتخاب و ارسال کنید: 👇",
         reply_markup=back_keyboard
     )
 
@@ -222,8 +294,16 @@ async def save_file_name(message: Message, state: FSMContext) -> None:
     user_id = message.from_user.id
     file_name = message.text.strip()
 
+    if file_name == "🔙 بازگشت":
+        await state.clear()
+        await message.answer(
+            "🔙 به بخش مدیریت فایل‌ها برگشتید: 👇",
+            reply_markup=file_management_keyboard
+        )
+        return
+
     if user_id not in user_temp_file:
-        await message.answer("⚠️ خطایی رخ داد. لطفاً دوباره فایل خود را ارسال کنید.", reply_markup=file_management_keyboard)
+        await message.answer("⚠️ خطایی رخ داد. لطفاً دوباره فایل خود را ارسال کنید. ❌", reply_markup=file_management_keyboard)
         await state.clear()
         return
 
@@ -247,14 +327,14 @@ async def save_file_name(message: Message, state: FSMContext) -> None:
     await state.set_state(None)
 
     await message.answer(
-        f"🎉 نام فایل با موفقیت ثبت شد: <b>{file_name}</b>\n\nحالا روی دکمه‌ی زیر کلیک کنید تا لینک دانلود را دریافت کنید: 👇",
+        f"🎉 نام فایل با موفقیت ثبت شد: <b>{file_name}</b> ✅\n\nحالا روی دکمه‌ی زیر کلیک کنید تا لینک دانلود را دریافت کنید: 👇",
         reply_markup=file_received_keyboard
     )
 
 
 @router.message(UploadStates.waiting_for_file_name)
 async def invalid_file_name(message: Message) -> None:
-    await message.answer("⚠️ لطفاً نام فایل را **فقط به صورت متن** ارسال کنید:")
+    await message.answer("⚠️ لطفاً نام فایل را **فقط به صورت متن** ارسال کنید: ❌")
 
 
 @router.message(F.text == "📥 دریافت لینک دانلود")
@@ -268,13 +348,13 @@ async def get_download_link(message: Message, state: FSMContext) -> None:
         file_name = shared_files_db[file_key]["name"]
 
         await message.answer(
-            f"🔗 لینک اختصاصی دانلود فایل (<b>{file_name}</b>):\n{share_link}\n\n✨ هرکس روی این لینک کلیک کند، ربات مستقیماً فایل را به او تحویل می‌دهد!",
+            f"🔗 لینک اختصاصی دانلود فایل (<b>{file_name}</b>): 📥\n{share_link}\n\n✨ هرکس روی این لینک کلیک کند، ربات مستقیماً فایل را به او تحویل می‌دهد! 🚀",
             reply_markup=file_management_keyboard
         )
         await state.clear()
     else:
         await message.answer(
-            "⚠️ ابتدا یک فایل جدید ارسال کنید و برای آن نام انتخاب کنید.",
+            "⚠️ ابتدا یک فایل جدید ارسال کنید و برای آن نام انتخاب کنید. ❌",
             reply_markup=file_management_keyboard
         )
 
@@ -286,7 +366,7 @@ async def list_user_files(message: Message, state: FSMContext) -> None:
 
     if user_id not in user_files_db or not user_files_db[user_id]:
         await message.answer(
-            "📭 شما هنوز هیچ فایلی در ربات آپلود نکرده‌اید.",
+            "📭 شما هنوز هیچ فایلی در ربات آپلود نکرده‌اید. ⚠️",
             reply_markup=file_management_keyboard
         )
         return
@@ -302,11 +382,11 @@ async def list_user_files(message: Message, state: FSMContext) -> None:
     keyboard = InlineKeyboardMarkup(inline_keyboard=inline_keyboard)
 
     await message.answer(
-        "📋 فایل‌های شما به شرح زیر است:\n\nبرای مشاهده هر فایل روی نام آن و برای حذف روی دکمه‌ی مربوطه کلیک کنید: 👇",
+        "📋 فایل‌های شما به شرح زیر است: 📂\n\nبرای مشاهده هر فایل روی نام آن و برای حذف روی دکمه‌ی مربوطه کلیک کنید: 👇",
         reply_markup=keyboard
     )
     await message.answer(
-        "🔙 برای بازگشت از منوی زیر استفاده کنید:",
+        "🔙 برای بازگشت از منوی زیر استفاده کنید: 👇",
         reply_markup=file_management_keyboard
     )
 
@@ -318,17 +398,17 @@ async def process_file_callback(callback_query):
     action, file_key = data.split("_", 1)
 
     if file_key not in shared_files_db:
-        await callback_query.answer("⚠️ این فایل دیگر وجود ندارد.", show_alert=True)
+        await callback_query.answer("⚠️ این فایل دیگر وجود ندارد. ❌", show_alert=True)
         return
 
     file_data = shared_files_db[file_key]
 
     if action == "view":
         if file_data["deleted"]:
-            await callback_query.answer("⚠️ این فایل حذف شده است.", show_alert=True)
+            await callback_query.answer("⚠️ این فایل حذف شده است. ❌", show_alert=True)
             return
         
-        await callback_query.message.answer(f"📦 فایل درخواستی شما (نام: {file_data['name']}):")
+        await callback_query.message.answer(f"📦 فایل درخواستی شما (نام: {file_data['name']}): 📥")
         if file_data["type"] == "document":
             await callback_query.message.answer_document(file_data["file_id"])
         elif file_data["type"] == "video":
@@ -338,16 +418,16 @@ async def process_file_callback(callback_query):
         elif file_data["type"] == "photo":
             await callback_query.message.answer_photo(file_data["file_id"])
             
-        await callback_query.answer("✅ فایل ارسال شد.")
+        await callback_query.answer("✅ فایل ارسال شد. 🚀")
 
     elif action == "del":
         file_data["deleted"] = True
         if user_id in user_files_db and file_key in user_files_db[user_id]:
             del user_files_db[user_id][file_key]
 
-        await callback_query.answer("🗑️ فایل با موفقیت حذف شد.", show_alert=True)
+        await callback_query.answer("🗑️ فایل با موفقیت حذف شد. ✅", show_alert=True)
         try:
-            await callback_query.message.edit_text("✅ این فایل از لیست شما حذف شد.")
+            await callback_query.message.edit_text("✅ این فایل از لیست شما حذف شد. 🗑️")
         except Exception:
             pass
 
