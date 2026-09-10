@@ -29,23 +29,23 @@ user_files_db = {}
 user_temp_file = {}
 shared_files_db = {}
 
-# دیتابیس موقت برای لینک‌های کاربران (user_id -> لیست لینک‌ها یا دیکشنری)
+# دیتابیس موقت برای لینک‌های کاربران
 user_links_db = {}
 user_temp_link = {}
 
 # --- کیبوردها ---
 
-# منوی اصلی
+# منوی اصلی (جایگاه خدمات لینک و مدیریت فایل‌ها جابه‌جا شد)
 main_menu_keyboard = ReplyKeyboardMarkup(
     keyboard=[
-        [KeyboardButton(text="🔗 خدمات لینک"), KeyboardButton(text="🗂️ مدیریت فایل‌ها")],
+        [KeyboardButton(text="🗂️ مدیریت فایل‌ها"), KeyboardButton(text="🔗 خدمات لینک")],
         [KeyboardButton(text="👤 حساب کاربری")]
     ],
     resize_keyboard=True,
     input_field_placeholder="لطفاً یکی از گزینه‌های زیر را انتخاب کنید... 👇"
 )
 
-# منوی بخش خدمات لینک (طبق درخواست: لینک‌های من سمت چپ، افزودن لینک جدید سمت راست)
+# منوی بخش خدمات لینک (لینک‌های من سمت چپ، افزودن لینک جدید سمت راست)
 link_services_keyboard = ReplyKeyboardMarkup(
     keyboard=[
         [KeyboardButton(text="➕ افزودن لینک جدید"), KeyboardButton(text="📋 لینک‌های من")],
@@ -134,7 +134,7 @@ async def upload_menu(message: Message, state: FSMContext) -> None:
     )
 
 
-# --- بخش خدمات لینک (به همراه دو کلید درخواستی) ---
+# --- بخش خدمات لینک ---
 
 @router.message(F.text == "🔗 خدمات لینک")
 async def link_services_menu(message: Message, state: FSMContext) -> None:
@@ -189,7 +189,6 @@ async def process_new_link(message: Message, state: FSMContext) -> None:
         if user_id not in user_links_db:
             user_links_db[user_id] = []
         
-        # ذخیره لینک کوتاه شده در دیتابیس کاربر
         link_item = {"long": user_link, "short": short_result}
         user_links_db[user_id].append(link_item)
 
