@@ -14,7 +14,7 @@ from aiogram.types import (
     InlineKeyboardButton
 )
 
-TOKEN = "8517015536:AAGzmG0jhiBLsiVr2UMnF-3w8kSz4Wjjkes"
+TOKEN = "8844658209:AAEsNJYBt9m1WAKvLCxbPwEQo2ROuCx7-14"
 
 router = Router()
 
